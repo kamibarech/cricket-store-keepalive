@@ -1,0 +1,41 @@
+# Keeps the free Supabase project awake, even when the shop is closed for weeks.
+# Supabase pauses a free project after 7 days with no activity. This says "hello"
+# to the database once a day, and writes the time to keep-alive.txt so there is a trail.
+# If a ping fails, GitHub emails you.
+name: Keep store database awake
+
+on:
+  schedule:
+    - cron: '17 1 * * *'   # every day at 06:17 Pakistan time (01:17 UTC)
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say hello to the database
+        env:
+          # Public key: it is already inside the app's page, it gives no access by itself.
+          SUPABASE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqcmxxZ3JuY3pvZGRvYXF5Y3NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5MjE5NzMsImV4cCI6MjEwODQ5Nzk3M30.TiJvotxLbWBl6txe08-cSyenMDIjLjTQXPXkAQr0feM
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 -X POST \
+            "https://tjrlqgrnczoddoaqycse.supabase.co/rest/v1/rpc/ping" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}' | tee ping-result.json
+          grep -q '"ok": *true' ping-result.json
+
+      - uses: actions/checkout@v4
+
+      - name: Write the time of this ping
+        run: |
+          date -u +"Last ping: %Y-%m-%d %H:%M UTC" > keep-alive.txt
+          git config user.name "keep-alive bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add keep-alive.txt
+          git commit -m "Keep-alive ping" || echo "Nothing to commit"
+          git push
